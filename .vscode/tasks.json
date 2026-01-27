@@ -1,0 +1,307 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start Dev Server",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"serve"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Start Dev Server",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"serve"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Start HTTP Server",
+			"type": "shell",
+			"command": "npx http-server . -p 8080 -o",
+			"args": [],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Build",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build Project",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build",
+			"type": "shell",
+			"command": "npm run build",
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Build",
+			"type": "shell",
+			"command": "npm run build",
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Build",
+			"type": "shell",
+			"command": "npm run build",
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Build2",
+			"type": "shell",
+			"command": "npm run build",
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Build3",
+			"type": "shell",
+			"command": "npm run build",
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "BuildFinal",
+			"type": "shell",
+			"command": "npm run build",
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Build with city count settings",
+			"type": "shell",
+			"command": "npm run build"
+		},
+		{
+			"label": "Build after truck system update",
+			"type": "shell",
+			"command": "npm run build"
+		},
+		{
+			"label": "Final build with all fixes",
+			"type": "shell",
+			"command": "npm run build"
+		},
+		{
+			"label": "Build all fixes",
+			"type": "shell",
+			"command": "npm run build"
+		},
+		{
+			"label": "Build fixed",
+			"type": "shell",
+			"command": "npm run build"
+		},
+		{
+			"label": "Build retry",
+			"type": "shell",
+			"command": "npm run build"
+		},
+		{
+			"label": "Build all changes",
+			"type": "shell",
+			"command": "npm run build"
+		},
+		{
+			"label": "Build final",
+			"type": "shell",
+			"command": "npm run build"
+		},
+		{
+			"label": "Build complete",
+			"type": "shell",
+			"command": "npm run build"
+		},
+		{
+			"label": "Build retry",
+			"type": "shell",
+			"command": "npm run build"
+		},
+		{
+			"label": "Final build",
+			"type": "shell",
+			"command": "npm run build"
+		},
+		{
+			"label": "Clean build",
+			"type": "shell",
+			"command": "npm run build"
+		},
+		{
+			"label": "Build shield and spawn fixes",
+			"type": "shell",
+			"command": "npm run build"
+		},
+		{
+			"label": "Build difficulty scaling changes",
+			"type": "shell",
+			"command": "npm run build",
+			"group": "build"
+		},
+		{
+			"label": "Build all bug fixes and railgun feature",
+			"type": "shell",
+			"command": "npm run build",
+			"group": "build"
+		},
+		{
+			"label": "Build all fixes - retry",
+			"type": "shell",
+			"command": "npm run build",
+			"group": "build"
+		},
+		{
+			"label": "Build - final attempt",
+			"type": "shell",
+			"command": "npm run build",
+			"group": "build"
+		},
+		{
+			"label": "Build - hopefully final",
+			"type": "shell",
+			"command": "npm run build",
+			"group": "build"
+		},
+		{
+			"label": "Build railgun fixes",
+			"type": "shell",
+			"command": "npm run build",
+			"group": "build"
+		}
+	]
+}

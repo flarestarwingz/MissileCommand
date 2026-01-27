@@ -1,0 +1,138 @@
+{
+  "fps": 60,
+  "title": "Missile Command Wallpaper",
+  "description": "A self-playing Missile Command-style live wallpaper with progressive difficulty, AI players, and retro vector graphics",
+  "author": "Missile Command Contributors",
+  "version": "1.0.0",
+  "file": "index.html",
+  "preview": "preview.png",
+  "generalinfo": {
+    "name": "Missile Command",
+    "description": "A dynamic live wallpaper featuring a self-playing Missile Command game",
+    "author": "Contributors"
+  },
+  "properties": [
+    {
+      "key": "aicount",
+      "label": "AI Count",
+      "type": "slider",
+      "value": 1,
+      "minimum": 1,
+      "maximum": 8,
+      "step": 1,
+      "helptext": "Number of AI players controlling the defense towers"
+    },
+    {
+      "key": "difficulty",
+      "label": "Difficulty",
+      "type": "combo",
+      "value": "normal",
+      "options": {
+        "easy": "Easy",
+        "normal": "Normal",
+        "hard": "Hard",
+        "extreme": "Extreme"
+      },
+      "helptext": "Game difficulty and enemy aggression level"
+    },
+    {
+      "key": "gamespeed",
+      "label": "Game Speed",
+      "type": "slider",
+      "value": 1.0,
+      "minimum": 0.5,
+      "maximum": 4.0,
+      "step": 0.1,
+      "helptext": "Speed multiplier for gameplay (useful for testing)"
+    },
+    {
+      "key": "cityrepairrate",
+      "label": "City Repair Rate",
+      "type": "slider",
+      "value": 1.0,
+      "minimum": 0.1,
+      "maximum": 10.0,
+      "step": 0.1,
+      "helptext": "How quickly damaged cities repair themselves"
+    },
+    {
+      "key": "colorpalette",
+      "label": "Color Palette",
+      "type": "combo",
+      "value": "classic",
+      "options": {
+        "classic": "Classic Arcade",
+        "monochrome": "Monochrome (OLED-safe)",
+        "retro": "Retro",
+        "red80s": "Red 80s Wireframe"
+      },
+      "helptext": "Visual theme and color scheme"
+    },
+    {
+      "key": "showscore",
+      "label": "Show Score",
+      "type": "bool",
+      "value": true,
+      "helptext": "Display current score on screen"
+    },
+    {
+      "key": "showwaveinfo",
+      "label": "Show Wave Info",
+      "type": "bool",
+      "value": true,
+      "helptext": "Display current wave and level"
+    },
+    {
+      "key": "showaicount",
+      "label": "Show AI Count",
+      "type": "bool",
+      "value": true,
+      "helptext": "Display number of active AIs"
+    },
+    {
+      "key": "showhealth",
+      "label": "Show Health",
+      "type": "bool",
+      "value": true,
+      "helptext": "Display city health bars"
+    },
+    {
+      "key": "showcoordinates",
+      "label": "Show Coordinates",
+      "type": "bool",
+      "value": false,
+      "helptext": "Display coordinate information (debug)"
+    },
+    {
+      "key": "showfps",
+      "label": "Show FPS",
+      "type": "bool",
+      "value": false,
+      "helptext": "Display frames per second counter"
+    },
+    {
+      "key": "debugmode",
+      "label": "Enable Debug Mode",
+      "type": "bool",
+      "value": false,
+      "helptext": "Enable debug tools and information"
+    },
+    {
+      "key": "showdebuginfo",
+      "label": "Show Debug Info",
+      "type": "bool",
+      "value": false,
+      "helptext": "Display debug information on screen"
+    },
+    {
+      "key": "repairatemultiplier",
+      "label": "Repair Rate Multiplier (Debug)",
+      "type": "slider",
+      "value": 1.0,
+      "minimum": 0.1,
+      "maximum": 10.0,
+      "step": 0.1,
+      "helptext": "Multiplier for city repair rate (debug only)"
+    }
+  ]
+}

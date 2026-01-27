@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Missile Command - Live Wallpaper</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            background-color: #000000;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background-color: #000000;
+        }
+
+        /* Settings Panel */
+        #settingsPanel {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.85);
+            border: 1px solid #00ff00;
+            border-radius: 4px;
+            padding: 10px;
+            min-width: 250px;
+            color: #00ff00;
+            font-size: 12px;
+            z-index: 100;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        #settingsPanel h3 {
+            margin-bottom: 10px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        #settingsPanel h3:hover {
+            color: #00cc00;
+        }
+
+        #settingsContent {
+            display: block;
+        }
+
+        #settingsContent.collapsed {
+            display: none;
+        }
+
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            padding: 4px 0;
+        }
+
+        .setting-row label {
+            flex: 1;
+        }
+
+        .setting-row input[type="range"] {
+            width: 80px;
+            accent-color: #00ff00;
+        }
+
+        .setting-row input[type="checkbox"] {
+            accent-color: #00ff00;
+            width: 16px;
+            height: 16px;
+        }
+
+        .setting-row select {
+            background: #111;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 2px 4px;
+            font-family: inherit;
+        }
+
+        .setting-row .value {
+            width: 40px;
+            text-align: right;
+            font-size: 11px;
+        }
+
+        .section-header {
+            border-top: 1px solid #00ff00;
+            margin-top: 10px;
+            padding-top: 10px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .section-header:hover {
+            color: #00cc00;
+        }
+
+        .debug-section {
+            display: none;
+        }
+
+        .debug-section.visible {
+            display: block;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #00ff00;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00cc00;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- Settings Panel -->
+    <div id="settingsPanel">
+        <h3 id="settingsToggle">⚙ Settings [-]</h3>
+        <div id="settingsContent">
+            <!-- AI count is auto-calculated from city count -->
+            
+            <div class="setting-row">
+                <label>Difficulty:</label>
+                <select id="difficulty">
+                    <option value="easy">Easy</option>
+                    <option value="normal" selected>Normal</option>
+                    <option value="hard">Hard</option>
+                    <option value="extreme">Extreme</option>
+                </select>
+            </div>
+            
+            <div class="setting-row">
+                <label>AI Accuracy:</label>
+                <input type="range" id="aiAccuracy" min="0" max="1" step="0.05" value="0.7">
+                <span class="value" id="aiAccuracyValue">70%</span>
+            </div>
+            
+            <div class="setting-row">
+                <label>Game Speed:</label>
+                <input type="range" id="gameSpeed" min="0.5" max="4" step="0.1" value="1">
+                <span class="value" id="gameSpeedValue">1.0x</span>
+            </div>
+            
+            <div class="setting-row">
+                <label>Color Palette:</label>
+                <select id="colorPalette">
+                    <option value="classic" selected>Classic</option>
+                    <option value="monochrome">Monochrome</option>
+                    <option value="retro">Retro</option>
+                    <option value="red80s">Red 80s</option>
+                </select>
+            </div>
+                        <div class="setting-row">
+                <label>City Count:</label>
+                <input type="range" id="cityCount" min="2" max="8" step="1" value="4">
+                <span class="value" id="cityCountValue">4</span>
+            </div>
+                        <!-- Display Toggles -->
+            <div class="section-header">📊 Display Options</div>
+            
+            <div class="setting-row">
+                <label>Show Score:</label>
+                <input type="checkbox" id="showScore" checked>
+            </div>
+            
+            <div class="setting-row">
+                <label>Show Wave Info:</label>
+                <input type="checkbox" id="showWaveInfo" checked>
+            </div>
+            
+            <div class="setting-row">
+                <label>Show AI Count:</label>
+                <input type="checkbox" id="showAICount" checked>
+            </div>
+            
+            <div class="setting-row">
+                <label>Show Health:</label>
+                <input type="checkbox" id="showHealth" checked>
+            </div>
+            
+            <div class="setting-row">
+                <label>Show FPS:</label>
+                <input type="checkbox" id="showFPS">
+            </div>
+            
+            <!-- Debug Section -->
+            <div class="section-header" id="debugToggle">🔧 Debug Mode [-]</div>
+            
+            <div class="setting-row">
+                <label>Enable Debug:</label>
+                <input type="checkbox" id="debugMode">
+            </div>
+            
+            <div class="debug-section" id="debugSection">
+                <div class="setting-row">
+                    <label>Show Debug Info:</label>
+                    <input type="checkbox" id="showDebugInfo">
+                </div>
+                
+                <div class="setting-row">
+                    <label>City Repair Rate:</label>
+                    <input type="range" id="cityRepairRate" min="0" max="10" step="0.1" value="1">
+                    <span class="value" id="cityRepairRateValue">1.0x</span>
+                </div>
+                
+                <div class="setting-row">
+                    <label>Spawn Boss:</label>
+                    <button id="spawnBossBtn" style="background:#111;color:#00ff00;border:1px solid #00ff00;padding:2px 8px;cursor:pointer;">Spawn</button>
+                </div>
+                
+                <div class="setting-row">
+                    <label>Death Wave:</label>
+                    <button id="deathWaveBtn" style="background:#111;color:#ff0000;border:1px solid #ff0000;padding:2px 8px;cursor:pointer;">Spawn 100</button>
+                </div>
+                
+                <div class="setting-row">
+                    <label>
+                        <input type="checkbox" id="debugClickMode">
+                        Debug Click Mode
+                    </label>
+                    <span style="font-size:10px;color:#888;">(city=destroy, turret=destroy, top=spawn)</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="dist/missile-command.js"></script>
+    <script>
+        // Settings panel interactivity
+        document.addEventListener('DOMContentLoaded', function() {
+            const settingsToggle = document.getElementById('settingsToggle');
+            const settingsContent = document.getElementById('settingsContent');
+            const debugToggle = document.getElementById('debugToggle');
+            const debugSection = document.getElementById('debugSection');
+            const debugModeCheckbox = document.getElementById('debugMode');
+            
+            // Toggle main settings
+            settingsToggle.addEventListener('click', function() {
+                settingsContent.classList.toggle('collapsed');
+                settingsToggle.textContent = settingsContent.classList.contains('collapsed') 
+                    ? '⚙ Settings [+]' 
+                    : '⚙ Settings [-]';
+            });
+            
+            // Toggle debug section
+            debugToggle.addEventListener('click', function() {
+                debugSection.classList.toggle('visible');
+                debugToggle.textContent = debugSection.classList.contains('visible')
+                    ? '🔧 Debug Mode [-]'
+                    : '🔧 Debug Mode [+]';
+            });
+            
+            // Show/hide debug section based on checkbox
+            debugModeCheckbox.addEventListener('change', function() {
+                if (this.checked) {
+                    debugSection.classList.add('visible');
+                    debugToggle.textContent = '🔧 Debug Mode [-]';
+                } else {
+                    debugSection.classList.remove('visible');
+                    debugToggle.textContent = '🔧 Debug Mode [+]';
+                }
+                updateSetting('debugMode', this.checked);
+            });
+            
+            // Value display updates
+            function setupSlider(id, valueSuffix = '') {
+                const slider = document.getElementById(id);
+                const valueDisplay = document.getElementById(id + 'Value');
+                if (slider && valueDisplay) {
+                    slider.addEventListener('input', function() {
+                        valueDisplay.textContent = parseFloat(this.value).toFixed(1) + valueSuffix;
+                        updateSetting(id, parseFloat(this.value));
+                    });
+                }
+            }
+            
+            // City count slider
+            document.getElementById('cityCountValue').textContent = document.getElementById('cityCount').value;
+            document.getElementById('cityCount').addEventListener('input', function() {
+                document.getElementById('cityCountValue').textContent = this.value;
+                updateSetting('cityCount', parseInt(this.value));
+            });
+            
+            // AI Accuracy slider
+            document.getElementById('aiAccuracyValue').textContent = Math.round(document.getElementById('aiAccuracy').value * 100) + '%';
+            document.getElementById('aiAccuracy').addEventListener('input', function() {
+                document.getElementById('aiAccuracyValue').textContent = Math.round(this.value * 100) + '%';
+                updateSetting('aiAccuracy', parseFloat(this.value));
+            });
+            
+            setupSlider('gameSpeed', 'x');
+            setupSlider('cityRepairRate', 'x');
+            
+            // Select updates
+            document.getElementById('difficulty').addEventListener('change', function() {
+                updateSetting('difficulty', this.value);
+            });
+            
+            document.getElementById('colorPalette').addEventListener('change', function() {
+                updateSetting('colorPalette', this.value);
+            });
+            
+            // Checkbox updates
+            ['showScore', 'showWaveInfo', 'showAICount', 'showHealth', 'showFPS', 'showDebugInfo'].forEach(function(id) {
+                const checkbox = document.getElementById(id);
+                if (checkbox) {
+                    checkbox.addEventListener('change', function() {
+                        updateSetting(id, this.checked);
+                    });
+                }
+            });
+            
+            // Spawn boss button
+            document.getElementById('spawnBossBtn').addEventListener('click', function() {
+                if (window.MissileCommand && window.MissileCommand.spawnBoss) {
+                    window.MissileCommand.spawnBoss();
+                }
+            });
+            
+            // Death wave button
+            document.getElementById('deathWaveBtn').addEventListener('click', function() {
+                if (window.MissileCommand && window.MissileCommand.spawnDeathWave) {
+                    window.MissileCommand.spawnDeathWave();
+                }
+            });
+            
+            // Debug click mode checkbox
+            document.getElementById('debugClickMode').addEventListener('change', function() {
+                if (window.MissileCommand && window.MissileCommand.setDebugClickMode) {
+                    window.MissileCommand.setDebugClickMode(this.checked);
+                }
+            });
+            
+            // Update setting in game
+            function updateSetting(key, value) {
+                if (window.MissileCommand && window.MissileCommand.updateSetting) {
+                    window.MissileCommand.updateSetting(key, value);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
