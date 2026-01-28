@@ -15,6 +15,7 @@ export class Enemy extends Entity {
   spawnTime: number;
   behavior: string;
   targetPos?: Vector2;
+  particleSpawnTimer: number = 0; // Timer for spawning trail particles
 
   constructor(x: number, y: number, config: GimmickConfig, spawnTime: number = 0) {
     super(`enemy_${config.id}_${Math.random()}`, x, y, config.size || 10);
@@ -269,6 +270,19 @@ export class Enemy extends Entity {
       }
       ctx.ctx.closePath();
       ctx.ctx.stroke();
+    } else if (this.config.id.includes('classic')) {
+      // Draw classic missile as a bright point/dot (like original arcade)
+      // The trail particles show the path, the missile is just the tip
+      ctx.ctx.fillStyle = color;
+      ctx.ctx.beginPath();
+      ctx.ctx.arc(this.position.x, this.position.y, this.radius * 0.8, 0, Math.PI * 2);
+      ctx.ctx.fill();
+      
+      // Bright center glow
+      ctx.ctx.fillStyle = '#FFFFFF';
+      ctx.ctx.beginPath();
+      ctx.ctx.arc(this.position.x, this.position.y, this.radius * 0.4, 0, Math.PI * 2);
+      ctx.ctx.fill();
     } else if (this.config.id.includes('missile')) {
       // Draw missile (pointed shape)
       ctx.ctx.beginPath();

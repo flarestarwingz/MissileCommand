@@ -41,6 +41,7 @@ export class MissileCommandWallpaper {
   private explosions: Explosion[] = [];
   private mobileDefenders: MobileDefender[] = [];
   private railgunBolts: RailgunBolt[] = []; // Railgun projectiles
+  private trailParticles: Array<{x: number, y: number, life: number, maxLife: number}> = []; // Persistent missile trail particles
 
   // Game flow
   private waveSpawner: WaveSpawner;
@@ -50,8 +51,10 @@ export class MissileCommandWallpaper {
   
   // Super weapon system
   private superWeaponAvailable: boolean = true;
+  private superWeaponCount: number = 1; // Number of available superweapons
   private superWeaponActive: boolean = false;
   private superWeaponAnimationTime: number = 0;
+  private superWeaponCooldownTime: number = 0; // Cooldown before AI can vote again (seconds)
   
   // Debug mode
   private debugClickMode: boolean = false;
@@ -377,9 +380,34 @@ export class MissileCommandWallpaper {
       }
     }
     
-    // Normal tower firing
-
-    // Find closest tower and fire towards mouse
+    // Normal firing - prioritize railguns if available
+    const activeRailguns = this.railguns.filter(r => !r.isDestroyed() && !r.parentCity.isDestroyed());
+    
+    // Try railguns first
+    if (activeRailguns.length > 0) {
+      let closestRailgun = activeRailguns[0];
+      let minRailDist = distance({ x: closestRailgun.parentCity.position.x + closestRailgun.xOffset, y: closestRailgun.parentCity.position.y }, pos);
+      
+      for (const railgun of activeRailguns) {
+        const railgunPos = { x: railgun.parentCity.position.x + railgun.xOffset, y: railgun.parentCity.position.y };
+        const d = distance(railgunPos, pos);
+        if (d < minRailDist) {
+          minRailDist = d;
+          closestRailgun = railgun;
+        }
+      }
+      
+      // Fire railgun at clicked position (human firing bypasses charge)
+      const railgunPos = { x: closestRailgun.parentCity.position.x + closestRailgun.xOffset, y: closestRailgun.parentCity.position.y };
+      const currentTime = this.gameEngine.getGameState().gameTime;
+      // Human can fire regardless of charge, but uses different visual (red instead of blue)
+      const bolt = new RailgunBolt(railgunPos, pos, 150, true); // true = human fired
+      this.railgunBolts.push(bolt);
+      // Don't update lastFireTime - keep it independent from AI charging
+      return;
+    }
+    
+    // Fallback to towers if no railguns available
     let closestTower = this.towers[0];
     let minDist = distance(closestTower.position, pos);
 
@@ -392,7 +420,8 @@ export class MissileCommandWallpaper {
     }
 
     const groundY = this.renderer.getDimensions().height - 40;
-    if (closestTower.canFireAt(pos, this.cities, groundY) && closestTower.fire(this.gameEngine.getGameState().gameTime, pos)) {
+    const currentTime = this.gameEngine.getGameState().gameTime;
+    if (closestTower.canFireAt(pos, this.cities, groundY) && closestTower.fire(currentTime, pos)) {
       const projectile = new Projectile(closestTower.position, pos, 250, closestTower.damage, '#00FF00');
       this.projectiles.push(projectile);
     }
@@ -405,11 +434,17 @@ export class MissileCommandWallpaper {
     const activeCities = this.cities.filter(c => !c.isDestroyed());
     const groundY = this.renderer.getDimensions().height - 40;
     
+    // Calculate baseline threat from wave/era (0-0.7 range)
+    const gameState = this.gameEngine.getGameState();
+    const waveRisk = Math.min(0.3, gameState.wave * 0.005); // +0.005 per wave, max 0.3
+    const eraRisk = gameState.level >= 20 ? 0.4 : gameState.level >= 15 ? 0.3 : gameState.level >= 10 ? 0.2 : gameState.level >= 5 ? 0.1 : 0;
+    const baselineThreat = waveRisk + eraRisk;
+    
     for (let i = 0; i < activeCities.length; i++) {
       const cityA = activeCities[i];
       
-      // Assess local threat
-      const threatLevel = cityA.assessThreat(this.enemies, gameTime);
+      // Assess local threat with baseline
+      const threatLevel = cityA.assessThreat(this.enemies, gameTime, baselineThreat);
       
       // Allow deployment even with turrets up, but prefer when turrets are down
       const activeTowers = this.towers.filter(t => t.parentCity === cityA && t.active && !t.isDestroyed()).length;
@@ -418,8 +453,8 @@ export class MissileCommandWallpaper {
       const canDeployLeft = cityA.canDeployDefender('left');
       const canDeployRight = cityA.canDeployDefender('right');
       
-      // Adjust threat threshold based on turret count: 0.4 if turrets down, 0.7 if turrets up
-      const threatThreshold = activeTowers < 2 ? 0.4 : 0.7;
+      // Adjust threat threshold based on turret count: 0.3 if turrets down, 0.55 if turrets up (lowered for more frequent deployment)
+      const threatThreshold = activeTowers < 2 ? 0.3 : 0.55;
       const shouldConsiderDeployment = threatLevel > threatThreshold && (canDeployLeft || canDeployRight);
       
       // If threat is critical and city can deploy
@@ -455,24 +490,24 @@ export class MissileCommandWallpaper {
           }
           
           // Both cities assess threat independently
-          const cityBThreat = nearestCity.assessThreat(this.enemies, gameTime);
+          const cityBThreat = nearestCity.assessThreat(this.enemies, gameTime, baselineThreat);
           
           // Check help history between cities
           const helpBalance = cityA.helpHistory.get(nearestCity.id) || 0;
           
-          // Determine if cityB will help based on stance and history
-          let cityBWillHelp = cityBThreat > 0.5;
+          // Determine if cityB will help based on stance and history (more lenient)
+          let cityBWillHelp = cityBThreat > 0.3; // Lowered from 0.5
           
           if (nearestCity.stance === 'selfish') {
-            // Selfish cities only help if they also have high threat or owed help
-            cityBWillHelp = cityBThreat > 0.7 || helpBalance > 2;
+            // Selfish cities only help if they also have threat or owed help
+            cityBWillHelp = cityBThreat > 0.4 || helpBalance > 2; // Lowered from 0.7
           } else if (nearestCity.stance === 'cooperative') {
             // Cooperative cities help more easily
-            cityBWillHelp = cityBThreat > 0.3 || helpBalance < -1;
+            cityBWillHelp = cityBThreat > 0.2 || helpBalance < -1; // Lowered from 0.3
           }
           
-          // Deploy if both agree (lowered threshold to 0.45 so cities deploy earlier)
-          if (cityBWillHelp && threatLevel > 0.45) {
+          // Deploy if both agree (lowered threshold to 0.35 so cities deploy earlier)
+          if (cityBWillHelp && threatLevel > 0.35) {
             console.log(`Cities ${cityA.id} & ${nearestCity.id} agreed! Threat: ${threatLevel.toFixed(2)}/${cityBThreat.toFixed(2)}, Balance: ${helpBalance}, Stance: ${nearestCity.stance}, Direction: ${direction}`);
             
             if (cityA.deployDefender(direction)) {
@@ -527,6 +562,43 @@ export class MissileCommandWallpaper {
             const currentBalance = cityA.helpHistory.get(nearestCity.id) || 0;
             cityA.helpHistory.set(nearestCity.id, currentBalance + 1); // cityB owes cityA (didn't help)
           }
+        } else {
+          // No living neighbors found - solo city deployment
+          // Check left side: has truck but neighbor is destroyed?
+          const leftTruck = cityA.leftSharedTruck;
+          const leftNeighborDead = leftTruck && (leftTruck.cityA === cityA ? leftTruck.cityB.isDestroyed() : leftTruck.cityA.isDestroyed());
+          
+          // Check right side: has truck but neighbor is destroyed?
+          const rightTruck = cityA.rightSharedTruck;
+          const rightNeighborDead = rightTruck && (rightTruck.cityA === cityA ? rightTruck.cityB.isDestroyed() : rightTruck.cityA.isDestroyed());
+          
+          // Deploy on available side if threat is high enough
+          if (threatLevel > 0.35 && (leftNeighborDead || rightNeighborDead)) {
+            const soloDirection = leftNeighborDead && canDeployLeft ? 'left' : rightNeighborDead && canDeployRight ? 'right' : null;
+            
+            if (soloDirection && cityA.deployDefender(soloDirection)) {
+              console.log(`Solo city ${cityA.id} deployed ${soloDirection} truck (no living neighbors)! Threat: ${threatLevel.toFixed(2)}`);
+              
+              // Deploy truck to protect this city's side
+              const deployX = soloDirection === 'left' ? cityA.position.x - 150 : cityA.position.x + 150;
+              
+              const defender = new MobileDefender(
+                cityA.position,
+                { x: deployX, y: groundY },
+                groundY
+              );
+              defender.sourceCityA = cityA;
+              // No sourceCityB for solo deployment
+              this.mobileDefenders.push(defender);
+              
+              cityA.timesHelped++;
+              cityA.helpfulnessScore += 5;
+            }
+          }
+          
+          // Clear communication
+          cityA.isCommunicating = false;
+          cityA.communicationTarget = null;
         }
       } else {
         // No threat or can't deploy - clear communication
@@ -540,7 +612,15 @@ export class MissileCommandWallpaper {
    * Super weapon voting and activation
    */
   private updateSuperWeaponVoting(gameTime: number): void {
-    if (!this.superWeaponAvailable || this.superWeaponActive) return;
+    // Update cooldown timer
+    if (this.superWeaponCooldownTime > 0) {
+      this.superWeaponCooldownTime -= 1 / 60; // Decrease by frame time (assuming 60fps)
+      if (this.superWeaponCooldownTime <= 0) {
+        this.superWeaponCooldownTime = 0;
+      }
+    }
+    
+    if (this.superWeaponCount <= 0 || this.superWeaponActive || this.superWeaponCooldownTime > 0) return;
     
     const activeCities = this.cities.filter(c => !c.isDestroyed());
     if (activeCities.length === 0) return;
@@ -567,7 +647,10 @@ export class MissileCommandWallpaper {
     
     // Each city votes based on threat level and personality
     activeCities.forEach(city => {
-      const threatLevel = city.assessThreat(this.enemies, gameTime);
+      const gameState = this.gameEngine.getGameState();
+      const waveBonus = Math.min(0.2, gameState.wave * 0.005);
+      const eraBonus = gameState.level * 0.01;
+      const threatLevel = city.assessThreat(this.enemies, gameTime, waveBonus, eraBonus);
       city.superWeaponConcern = threatLevel;
       
       // PANIC MODE: If situation is overwhelming, even selfish cities agree
@@ -610,12 +693,13 @@ export class MissileCommandWallpaper {
   private activateSuperWeapon(): void {
     this.superWeaponActive = true;
     this.superWeaponAnimationTime = 0;
-    this.superWeaponAvailable = false; // One per era
+    this.superWeaponCount--; // Consume one superweapon
+    this.superWeaponCooldownTime = 5; // 5 second cooldown before AI can vote again
     
     const gameState = this.gameEngine.getGameState();
     const era = gameState.era;
     
-    console.log(`Super weapon activated for era: ${era}`);
+    console.log(`⚡ Super weapon activated for era: ${era}! Remaining: ${this.superWeaponCount}`);
     
     // Destroy all enemies
     this.enemies.forEach(enemy => {
@@ -647,8 +731,17 @@ export class MissileCommandWallpaper {
   private update(deltaTime: number): void {
     const gameState = this.gameEngine.getGameState();
 
-    // Update entities
-    this.cities.forEach(city => city.update(deltaTime, this.renderer.getDimensions().width, this.renderer.getDimensions().height));
+    // Update entities with era-based repair scaling
+    const eraMultipliers: Record<string, number> = {
+      'meteors': 1,
+      'eighties_missiles': 2,
+      'nineties_asteroids': 4,
+      'two_thousands': 7,
+      'future': 10,
+      'classic': 15 // Classic era gets best healing - intense difficulty
+    };
+    const eraMultiplier = eraMultipliers[gameState.era] || 1;
+    this.cities.forEach(city => city.update(deltaTime, this.renderer.getDimensions().width, this.renderer.getDimensions().height, eraMultiplier));
     
     // Update shared truck cooldowns
     this.sharedTrucks.forEach(truck => truck.update(deltaTime));
@@ -708,7 +801,32 @@ export class MissileCommandWallpaper {
       console.log(`Filtered out ${enemiesBeforeFilter - enemiesAfterFilter} inactive enemies`);
     }
     
-    this.enemies.forEach(enemy => enemy.update(deltaTime, this.renderer.getDimensions().width, this.renderer.getDimensions().height));
+    // Update enemies and spawn trail particles for classic missiles
+    this.enemies.forEach(enemy => {
+      enemy.update(deltaTime, this.renderer.getDimensions().width, this.renderer.getDimensions().height);
+      
+      // Spawn trail particles for classic missiles
+      if (enemy.config.trail) {
+        enemy.particleSpawnTimer += deltaTime;
+        // Spawn particles frequently (every 0.02 seconds = 50 per second)
+        if (enemy.particleSpawnTimer >= 0.02) {
+          enemy.particleSpawnTimer = 0;
+          this.trailParticles.push({
+            x: enemy.position.x,
+            y: enemy.position.y,
+            life: 1.0, // Start at full life
+            maxLife: 3.0 // Persist for 3 seconds
+          });
+        }
+      }
+    });
+    
+    // Update trail particles (fade over time)
+    this.trailParticles = this.trailParticles.filter(p => p.life > 0);
+    this.trailParticles.forEach(particle => {
+      particle.life -= deltaTime / particle.maxLife;
+    });
+    
     this.projectiles = this.projectiles.filter(p => p.active);
     this.projectiles.forEach(proj => proj.update(deltaTime, this.renderer.getDimensions().width, this.renderer.getDimensions().height));
     this.explosions = this.explosions.filter(e => e.active);
@@ -809,8 +927,8 @@ export class MissileCommandWallpaper {
       // If era changed, mark it for wave spawner (resets wave scaling)
       if (previousEra !== gameState.era) {
         this.waveSpawner.setEraStart(gameState.wave);
-        this.superWeaponAvailable = true;
-        console.log(`Era changed to ${gameState.era} - Super weapon recharged!`);
+        this.superWeaponCount++; // Grant new superweapon for new era
+        console.log(`Era changed to ${gameState.era} - Superweapon granted! Total: ${this.superWeaponCount}`);
       }
       
       this.waveSpawner.reset();
@@ -928,14 +1046,14 @@ export class MissileCommandWallpaper {
           threatScore += 200 * groundProximity; // Near ground but not targeting city
         }
         
+        // PRIORITY 0: Bosses get massive priority boost
+        if (enemy.maxHealth >= 150) {
+          threatScore += 800; // Bosses are top priority after city threats
+        }
+        
         // PRIORITY 4: Harmless enemies (LOW priority - only if nothing else to shoot)
         if (!willHitCity && !willHitRailgun && groundProximity < 0.7) {
           threatScore += 10; // Very low
-        }
-        
-        // Bonus for high health (boss-like)
-        if (enemy.maxHealth > 100) {
-          threatScore += 50;
         }
         
         validTargets.push({enemy, threat: threatScore, willHitCity, willHitRailgun});
@@ -1463,6 +1581,13 @@ export class MissileCommandWallpaper {
    * Spawn death wave (debug) - 100 enemies at once
    */
   public spawnDeathWave(): void {
+    this.spawnWave(100);
+  }
+  
+  /**
+   * Spawn wave of enemies (debug) - configurable count
+   */
+  public spawnWave(count: number): void {
     const { width } = this.renderer.getDimensions();
     const gameState = this.gameEngine.getGameState();
     const era = gameState.era;
@@ -1474,17 +1599,32 @@ export class MissileCommandWallpaper {
       return;
     }
     
-    console.log('DEATH WAVE! Spawning 100 enemies...');
+    // Filter out bosses for wave spawns
+    const nonBosses = gimmicks.filter(
+      (g: any) => g.health < 75 && !g.specialAbility && g.behavior !== 'bombing' && g.behavior !== 'stationary'
+    );
     
-    for (let i = 0; i < 100; i++) {
+    const spawnPool = nonBosses.length > 0 ? nonBosses : gimmicks;
+    
+    console.log(`Spawning ${count} enemies...`);
+    
+    for (let i = 0; i < count; i++) {
       const x = random(50, width - 50);
       const y = -30 - (i * 5); // Stagger vertically
       
-      // Random enemy from current era
-      const config = gimmicks[Math.floor(Math.random() * gimmicks.length)];
+      // Random enemy from current era (non-boss)
+      const config = spawnPool[Math.floor(Math.random() * spawnPool.length)];
       const enemy = new Enemy(x, y, config);
       this.enemies.push(enemy);
     }
+  }
+  
+  /**
+   * Add a superweapon (debug)
+   */
+  public addSuperweapon(): void {
+    this.superWeaponCount++;
+    console.log(`⚡ Superweapon added! Total available: ${this.superWeaponCount}`);
   }
   
   /**
@@ -1508,6 +1648,7 @@ export class MissileCommandWallpaper {
     this.projectiles = [];
     this.explosions = [];
     this.railgunBolts = []; // Clear railgun bolts
+    this.trailParticles = []; // Clear trail particles
     this.cities = this.createCities();
     this.towers = this.createTowers();
     this.createSharedTrucks();
@@ -1720,6 +1861,30 @@ export class MissileCommandWallpaper {
         }
       }
     }
+    
+    // Render trail particles first (background layer, before enemies)
+    for (const particle of this.trailParticles) {
+      const alpha = particle.life; // Fade based on life
+      
+      // Outer glow (orange fire)
+      renderCtx.ctx.fillStyle = `rgba(255, 100, 0, ${alpha * 0.4})`;
+      renderCtx.ctx.beginPath();
+      renderCtx.ctx.arc(particle.x, particle.y, 4, 0, Math.PI * 2);
+      renderCtx.ctx.fill();
+      
+      // Middle layer (bright yellow-orange)
+      renderCtx.ctx.fillStyle = `rgba(255, 200, 50, ${alpha * 0.6})`;
+      renderCtx.ctx.beginPath();
+      renderCtx.ctx.arc(particle.x, particle.y, 2.5, 0, Math.PI * 2);
+      renderCtx.ctx.fill();
+      
+      // Inner core (white hot)
+      renderCtx.ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.9})`;
+      renderCtx.ctx.beginPath();
+      renderCtx.ctx.arc(particle.x, particle.y, 1.2, 0, Math.PI * 2);
+      renderCtx.ctx.fill();
+    }
+    
     for (const enemy of this.enemies) {
       enemy.render(renderCtx);
     }
@@ -1839,7 +2004,7 @@ export class MissileCommandWallpaper {
     }
     
     // Render super weapon voting status
-    if (this.superWeaponAvailable && !this.superWeaponActive) {
+    if (this.superWeaponCount > 0 && !this.superWeaponActive && this.superWeaponCooldownTime <= 0) {
       const activeCities = this.cities.filter(c => !c.isDestroyed());
       const votedCount = activeCities.filter(c => c.votedForSuperWeapon).length;
       
@@ -1934,7 +2099,9 @@ export class MissileCommandWallpaper {
       gameState,
       settings,
       this.aiController.getAIInstances(),
-      this.fps
+      this.fps,
+      this.superWeaponCount,
+      this.superWeaponCooldownTime
     );
     
     // Debug info overlay - show health and state for all entities
@@ -2401,9 +2568,11 @@ declare global {
       updateSetting: (key: string, value: any) => void;
       spawnBoss: () => void;
       spawnDeathWave: () => void;
+      spawnWave: (count: number) => void;
       setDebugClickMode: (enabled: boolean) => void;
       nextWave: () => void;
       nextEra: () => void;
+      addSuperweapon: () => void;
     };
   }
 }
@@ -2420,9 +2589,11 @@ if (document.readyState === 'loading') {
       updateSetting: (key: string, value: any) => gameInstance.updateSetting(key, value),
       spawnBoss: () => gameInstance.spawnBoss(),
       spawnDeathWave: () => gameInstance.spawnDeathWave(),
+      spawnWave: (count: number) => gameInstance.spawnWave(count),
       setDebugClickMode: (enabled: boolean) => gameInstance.setDebugClickMode(enabled),
       nextWave: () => gameInstance.nextWave(),
       nextEra: () => gameInstance.nextEra(),
+      addSuperweapon: () => gameInstance.addSuperweapon(),
     };
   });
 } else {
@@ -2433,8 +2604,10 @@ if (document.readyState === 'loading') {
     updateSetting: (key: string, value: any) => gameInstance.updateSetting(key, value),
     spawnBoss: () => gameInstance.spawnBoss(),
     spawnDeathWave: () => gameInstance.spawnDeathWave(),
+    spawnWave: (count: number) => gameInstance.spawnWave(count),
     setDebugClickMode: (enabled: boolean) => gameInstance.setDebugClickMode(enabled),
     nextWave: () => gameInstance.nextWave(),
     nextEra: () => gameInstance.nextEra(),
+    addSuperweapon: () => gameInstance.addSuperweapon(),
   };
 }

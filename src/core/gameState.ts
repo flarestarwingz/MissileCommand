@@ -10,6 +10,7 @@ export enum GameEra {
   NINETIES_ASTEROIDS = 'nineties_asteroids',
   TWO_THOUSANDS = 'two_thousands',
   FUTURE = 'future',
+  CLASSIC = 'classic',
 }
 
 export interface GameStats {
@@ -57,7 +58,8 @@ export class GameState {
     if (level < 10) return GameEra.EIGHTIES_MISSILES;
     if (level < 15) return GameEra.NINETIES_ASTEROIDS;
     if (level < 20) return GameEra.TWO_THOUSANDS;
-    return GameEra.FUTURE;
+    if (level < 25) return GameEra.FUTURE;
+    return GameEra.CLASSIC; // Final era - regression to classic Missile Command
   }
 
   /**
@@ -87,6 +89,7 @@ export class GameState {
       GameEra.NINETIES_ASTEROIDS,
       GameEra.TWO_THOUSANDS,
       GameEra.FUTURE,
+      GameEra.CLASSIC,
     ];
     
     const currentIndex = eraOrder.indexOf(this.era);
@@ -97,6 +100,7 @@ export class GameState {
       else if (this.era === GameEra.NINETIES_ASTEROIDS) this.level = 10;
       else if (this.era === GameEra.TWO_THOUSANDS) this.level = 15;
       else if (this.era === GameEra.FUTURE) this.level = 20;
+      else if (this.era === GameEra.CLASSIC) this.level = 25;
       
       // Also update wave to match level
       this.wave = this.level * 5;

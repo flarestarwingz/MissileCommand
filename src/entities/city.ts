@@ -183,10 +183,11 @@ export class City extends Entity {
   /**
    * Update city
    */
-  update(deltaTime: number, width: number, height: number): void {
+  update(deltaTime: number, width: number, height: number, eraMultiplier: number = 1): void {
     // Only repair if not destroyed
+    // Scale repair by era: 1x in era 1, 2x in era 2, 3x in era 3, 4x in era 4, 5x in era 5
     if (!this.isDestroyed()) {
-      this.repair(this.repairRate * deltaTime);
+      this.repair(this.repairRate * deltaTime * eraMultiplier);
     }
     
     // Truck cooldowns are now handled by SharedTruck objects in main game loop
@@ -208,12 +209,19 @@ export class City extends Entity {
   
   /**
    * Can deploy defender for a specific neighbor?
+   * Allows solo deployment if this city has no living neighbor (but truck exists)
    */
   canDeployDefender(direction: 'left' | 'right'): boolean {
     if (this.isDestroyed()) return false;
     const truck = direction === 'left' ? this.leftSharedTruck : this.rightSharedTruck;
     if (!truck) return false;
-    return truck.available && !truck.cityA.isDestroyed() && !truck.cityB.isDestroyed();
+    
+    // Can deploy if truck is available AND at least this city is alive
+    // Allow solo deployment when neighbor is destroyed
+    const thisAlive = !this.isDestroyed();
+    const neighborAlive = (truck.cityA === this ? !truck.cityB.isDestroyed() : !truck.cityA.isDestroyed());
+    
+    return truck.available && thisAlive;
   }
   
   /**
@@ -229,7 +237,7 @@ export class City extends Entity {
   /**
    * Assess threat level based on nearby enemies
    */
-  assessThreat(enemies: any[], currentTime: number): number {
+  assessThreat(enemies: any[], currentTime: number, waveBonus: number = 0, eraBonus: number = 0): number {
     if (currentTime - this.lastThreatAssessment < 1000) {
       return this.assessedThreatLevel;
     }
@@ -251,12 +259,17 @@ export class City extends Entity {
         const proximityFactor = 1 - (dist / threatRange);
         // Boss enemies = higher threat
         const bossFactor = enemy.maxHealth > 200 ? 2 : 1;
-        threatLevel += proximityFactor * bossFactor;
+        // Expanding enemies = CRITICAL threat
+        const expandingFactor = enemy.config?.behavior === 'expanding' ? 3 : 1;
+        threatLevel += proximityFactor * bossFactor * expandingFactor;
       }
     }
     
+    // Add baseline threat from wave/era progression (makes cities deploy more in later stages)
+    const baselineThreat = waveBonus + eraBonus;
+    
     // Normalize to 0-1
-    this.assessedThreatLevel = Math.min(1, threatLevel / 3);
+    this.assessedThreatLevel = Math.min(1, (threatLevel / 3) + baselineThreat);
     return this.assessedThreatLevel;
   }
 

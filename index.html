@@ -230,24 +230,31 @@
                     <span class="value" id="cityRepairRateValue">1.0x</span>
                 </div>
                 
-                <div class="setting-row">
-                    <label>Spawn Boss:</label>
-                    <button id="spawnBossBtn" style="background:#111;color:#00ff00;border:1px solid #00ff00;padding:2px 8px;cursor:pointer;">Spawn</button>
+                <!-- Spawn Section -->
+                <div style="margin-top:10px;padding-top:8px;border-top:1px solid #00ff00;">
+                    <div style="margin-bottom:6px;color:#00ff00;font-size:11px;">Spawn</div>
+                    <div class="setting-row">
+                        <button id="spawnBossBtn" style="background:#111;color:#00ff00;border:1px solid #00ff00;padding:2px 8px;cursor:pointer;margin-right:4px;">Boss</button>
+                        <button id="spawn100WaveBtn" style="background:#111;color:#ffaa00;border:1px solid #ffaa00;padding:2px 8px;cursor:pointer;margin-right:4px;">100 Wave</button>
+                        <button id="spawn1000WaveBtn" style="background:#111;color:#ff0000;border:1px solid #ff0000;padding:2px 8px;cursor:pointer;">1000 Wave</button>
+                    </div>
                 </div>
                 
-                <div class="setting-row">
-                    <label>Death Wave:</label>
-                    <button id="deathWaveBtn" style="background:#111;color:#ff0000;border:1px solid #ff0000;padding:2px 8px;cursor:pointer;">Spawn 100</button>
+                <!-- Skip Section -->
+                <div style="margin-top:10px;padding-top:8px;border-top:1px solid #00ff00;">
+                    <div style="margin-bottom:6px;color:#00ff00;font-size:11px;">Skip</div>
+                    <div class="setting-row">
+                        <button id="nextWaveBtn" style="background:#111;color:#00ffff;border:1px solid #00ffff;padding:2px 8px;cursor:pointer;margin-right:4px;">Wave ⏭</button>
+                        <button id="nextEraBtn" style="background:#111;color:#ffff00;border:1px solid #ffff00;padding:2px 8px;cursor:pointer;">Era 🚀</button>
+                    </div>
                 </div>
                 
-                <div class="setting-row">
-                    <label>Next Wave:</label>
-                    <button id="nextWaveBtn" style="background:#111;color:#00ffff;border:1px solid #00ffff;padding:2px 8px;cursor:pointer;">Skip ⏭</button>
-                </div>
-                
-                <div class="setting-row">
-                    <label>Next Era:</label>
-                    <button id="nextEraBtn" style="background:#111;color:#ffff00;border:1px solid #ffff00;padding:2px 8px;cursor:pointer;">Skip 🚀</button>
+                <!-- Superweapon Section -->
+                <div style="margin-top:10px;padding-top:8px;border-top:1px solid #00ff00;">
+                    <div class="setting-row">
+                        <label>Add Superweapon:</label>
+                        <button id="addSuperweaponBtn" style="background:#111;color:#ff00ff;border:1px solid #ff00ff;padding:2px 8px;cursor:pointer;">+1 ⚡</button>
+                    </div>
                 </div>
                 
                 <div class="setting-row">
@@ -354,10 +361,17 @@
                 }
             });
             
-            // Death wave button
-            document.getElementById('deathWaveBtn').addEventListener('click', function() {
-                if (window.MissileCommand && window.MissileCommand.spawnDeathWave) {
-                    window.MissileCommand.spawnDeathWave();
+            // Spawn 100 wave button
+            document.getElementById('spawn100WaveBtn').addEventListener('click', function() {
+                if (window.MissileCommand && window.MissileCommand.spawnWave) {
+                    window.MissileCommand.spawnWave(100);
+                }
+            });
+            
+            // Spawn 1000 wave button
+            document.getElementById('spawn1000WaveBtn').addEventListener('click', function() {
+                if (window.MissileCommand && window.MissileCommand.spawnWave) {
+                    window.MissileCommand.spawnWave(1000);
                 }
             });
             
@@ -372,6 +386,13 @@
             document.getElementById('nextEraBtn').addEventListener('click', function() {
                 if (window.MissileCommand && window.MissileCommand.nextEra) {
                     window.MissileCommand.nextEra();
+                }
+            });
+            
+            // Add superweapon button
+            document.getElementById('addSuperweaponBtn').addEventListener('click', function() {
+                if (window.MissileCommand && window.MissileCommand.addSuperweapon) {
+                    window.MissileCommand.addSuperweapon();
                 }
             });
             

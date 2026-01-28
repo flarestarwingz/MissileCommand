@@ -275,10 +275,12 @@ export class RailgunBolt extends Entity {
   age: number = 0;
   maxAge: number = 2.0; // Extended for particle fade
   beamFadeTime: number = 0.8; // Beam fades quickly
+  isHumanFired: boolean = false; // Different visual for human-fired bolts
   
-  constructor(start: Vector2, target: Vector2, damage: number) {
+  constructor(start: Vector2, target: Vector2, damage: number, isHumanFired: boolean = false) {
     super(`railgun_bolt_${Math.random()}`, start.x, start.y, 3);
     this.damage = damage;
+    this.isHumanFired = isHumanFired;
     
     // Calculate direction - bolt travels VERY fast (essentially instant)
     const dx = target.x - start.x;
@@ -345,7 +347,7 @@ export class RailgunBolt extends Entity {
   }
   
   /**
-   * Render bolt as black core with blue halos and particle dissipation
+   * Render bolt as black core with blue halos (AI) or red with black particles (human)
    */
   render(ctx: RenderContext): void {
     const palette = ctx.palette;
@@ -353,38 +355,55 @@ export class RailgunBolt extends Entity {
     // Beam fades quickly, particles linger longer
     const beamFade = Math.max(0, 1 - (this.age / this.beamFadeTime));
     
+    // Color scheme based on firing mode
+    const colors = this.isHumanFired ? {
+      outer: { r: 255, g: 50, b: 50 },    // Red outer glow
+      middle: { r: 255, g: 100, b: 80 },  // Orange-red middle
+      inner: { r: 255, g: 150, b: 120 },  // Lighter red inner
+      core: { r: 20, g: 0, b: 0 },        // Dark red/black core
+      particle1: { r: 200, g: 0, b: 0 },  // Red particle
+      particle2: { r: 100, g: 0, b: 0 }   // Dark red particle
+    } : {
+      outer: { r: 60, g: 140, b: 255 },   // Blue outer glow
+      middle: { r: 80, g: 180, b: 255 },  // Bright blue middle
+      inner: { r: 120, g: 200, b: 255 },  // Light blue inner
+      core: { r: 0, g: 0, b: 0 },         // Black core
+      particle1: { r: 100, g: 180, b: 255 }, // Blue particle
+      particle2: { r: 150, g: 220, b: 255 }  // Light blue particle
+    };
+    
     // Draw the beam trail (fades first)
     if (beamFade > 0 && this.trailPoints.length > 1) {
       for (let i = 0; i < this.trailPoints.length - 1; i++) {
         const segmentFade = (i / this.trailPoints.length) * 0.3 + 0.7;
         const alpha = beamFade * segmentFade;
         
-        // Outer blue halo (soft glow)
-        ctx.ctx.strokeStyle = `rgba(60, 140, 255, ${alpha * 0.3})`;
+        // Outer halo (soft glow)
+        ctx.ctx.strokeStyle = `rgba(${colors.outer.r}, ${colors.outer.g}, ${colors.outer.b}, ${alpha * 0.3})`;
         ctx.ctx.lineWidth = 14;
         ctx.ctx.beginPath();
         ctx.ctx.moveTo(this.trailPoints[i].x, this.trailPoints[i].y);
         ctx.ctx.lineTo(this.trailPoints[i + 1].x, this.trailPoints[i + 1].y);
         ctx.ctx.stroke();
         
-        // Middle blue halo (brighter)
-        ctx.ctx.strokeStyle = `rgba(80, 180, 255, ${alpha * 0.5})`;
+        // Middle halo (brighter)
+        ctx.ctx.strokeStyle = `rgba(${colors.middle.r}, ${colors.middle.g}, ${colors.middle.b}, ${alpha * 0.5})`;
         ctx.ctx.lineWidth = 8;
         ctx.ctx.beginPath();
         ctx.ctx.moveTo(this.trailPoints[i].x, this.trailPoints[i].y);
         ctx.ctx.lineTo(this.trailPoints[i + 1].x, this.trailPoints[i + 1].y);
         ctx.ctx.stroke();
         
-        // Inner blue ring
-        ctx.ctx.strokeStyle = `rgba(120, 200, 255, ${alpha * 0.7})`;
+        // Inner ring
+        ctx.ctx.strokeStyle = `rgba(${colors.inner.r}, ${colors.inner.g}, ${colors.inner.b}, ${alpha * 0.7})`;
         ctx.ctx.lineWidth = 4;
         ctx.ctx.beginPath();
         ctx.ctx.moveTo(this.trailPoints[i].x, this.trailPoints[i].y);
         ctx.ctx.lineTo(this.trailPoints[i + 1].x, this.trailPoints[i + 1].y);
         ctx.ctx.stroke();
         
-        // Black core (bullet-like)
-        ctx.ctx.strokeStyle = `rgba(0, 0, 0, ${alpha * 0.9})`;
+        // Dark core
+        ctx.ctx.strokeStyle = `rgba(${colors.core.r}, ${colors.core.g}, ${colors.core.b}, ${alpha * 0.9})`;
         ctx.ctx.lineWidth = 2;
         ctx.ctx.beginPath();
         ctx.ctx.moveTo(this.trailPoints[i].x, this.trailPoints[i].y);
@@ -399,14 +418,14 @@ export class RailgunBolt extends Entity {
       
       const particleAlpha = particle.life * 0.6;
       
-      // Blue glow particle
-      ctx.ctx.fillStyle = `rgba(100, 180, 255, ${particleAlpha * 0.5})`;
+      // Colored glow particle
+      ctx.ctx.fillStyle = `rgba(${colors.particle1.r}, ${colors.particle1.g}, ${colors.particle1.b}, ${particleAlpha * 0.5})`;
       ctx.ctx.beginPath();
       ctx.ctx.arc(particle.x, particle.y, 3, 0, Math.PI * 2);
       ctx.ctx.fill();
       
       // Bright center
-      ctx.ctx.fillStyle = `rgba(150, 220, 255, ${particleAlpha})`;
+      ctx.ctx.fillStyle = `rgba(${colors.particle2.r}, ${colors.particle2.g}, ${colors.particle2.b}, ${particleAlpha})`;
       ctx.ctx.beginPath();
       ctx.ctx.arc(particle.x, particle.y, 1.5, 0, Math.PI * 2);
       ctx.ctx.fill();

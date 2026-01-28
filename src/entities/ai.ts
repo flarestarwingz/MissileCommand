@@ -210,7 +210,20 @@ export class AIController {
         }
       }
 
-      // Priority 1: Boss-like enemies (high health)
+      // Priority 1: Expanding enemies (CRITICAL - dimension rifts)
+      if (enemy.config?.behavior === 'expanding') {
+        score += 500; // Highest priority
+        // Extra priority based on size growth
+        const sizeGrowth = enemy.radius / (enemy.config.size || 1);
+        score += sizeGrowth * 100; // More dangerous as it expands
+      }
+            // Priority 0: EXPANDING ENEMIES (dimension rifts) - CRITICAL THREAT
+      if (enemy.config?.behavior === 'expanding') {
+        score += 500; // Highest priority - must be destroyed ASAP
+        // Extra urgency based on size (they grow over time)
+        score += enemy.radius * 5;
+      }
+            // Priority 2: Boss-like enemies (high health)
       if (enemy.maxHealth > 150) {
         score += 150;
       }
@@ -276,6 +289,17 @@ export class AIController {
    */
   private predictEnemyPosition(enemy: Enemy, distance: number, from: Vector2, accuracy: number): Vector2 {
     const projectileSpeed = 250;
+    
+    // Special handling for expanding enemies (dimension rifts)
+    // Target the EDGE closest to the tower, not the center
+    if (enemy.config?.behavior === 'expanding') {
+      // Calculate angle from tower to enemy center
+      const angleToCenter = Math.atan2(enemy.position.y - from.y, enemy.position.x - from.x);
+      // Target a point on the edge of the expanding circle
+      const targetX = enemy.position.x - Math.cos(angleToCenter) * (enemy.radius * 0.8); // 80% to edge
+      const targetY = enemy.position.y - Math.sin(angleToCenter) * (enemy.radius * 0.8);
+      return { x: targetX, y: targetY };
+    }
     
     // For 100% accuracy, use perfect interception math
     if (accuracy >= 0.99) {

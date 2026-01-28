@@ -48,7 +48,9 @@ export class HUD {
     gameState: GameState,
     settings: Settings,
     aiInstances: AIInstance[],
-    fps: number
+    fps: number,
+    superweaponCount: number = 0,
+    superweaponCooldown: number = 0
   ): void {
     if (!this.visible) return;
 
@@ -100,7 +102,8 @@ export class HUD {
         'eighties_missiles': '80s Missiles',
         'nineties_asteroids': '90s Asteroids',
         'two_thousands': '2000s',
-        'future': 'Future'
+        'future': 'Future',
+        'classic': 'Classic'
       };
       const eraDisplay = eraNames[gameState.era] || gameState.era;
       ctx.ctx.fillText(`Era: ${eraDisplay}`, padding, yPos);
@@ -118,6 +121,12 @@ export class HUD {
       yPos += 15;
 
       ctx.ctx.fillText(`Game Time: ${(gameState.gameTime / 1000).toFixed(1)}s`, padding, yPos);
+      yPos += 15;
+      
+      // Superweapon count
+      ctx.ctx.fillStyle = superweaponCount > 0 ? '#ff00ff' : '#666666';
+      const cooldownText = superweaponCooldown > 0 ? ` (cooldown: ${superweaponCooldown.toFixed(1)}s)` : '';
+      ctx.ctx.fillText(`Superweapons: ${superweaponCount}${cooldownText}`, padding, yPos);
       yPos += 20;
     }
 

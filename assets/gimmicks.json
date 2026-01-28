@@ -212,6 +212,41 @@
         "specialAbility": "expands_damage_zone",
         "expansion_rate": 1.2
       }
+    ],
+    "classic": [
+      {
+        "id": "classic_slow",
+        "name": "Classic Missile (Slow)",
+        "health": 20,
+        "speed": 1.5,
+        "size": 6,
+        "rarity": 0.5,
+        "aiAwareness": "medium",
+        "behavior": "ballistic",
+        "trail": true
+      },
+      {
+        "id": "classic_medium",
+        "name": "Classic Missile (Medium)",
+        "health": 25,
+        "speed": 2.5,
+        "size": 7,
+        "rarity": 0.35,
+        "aiAwareness": "medium",
+        "behavior": "ballistic",
+        "trail": true
+      },
+      {
+        "id": "classic_fast",
+        "name": "Classic Missile (Fast)",
+        "health": 30,
+        "speed": 4.0,
+        "size": 8,
+        "rarity": 0.15,
+        "aiAwareness": "high",
+        "behavior": "ballistic",
+        "trail": true
+      }
     ]
   }
 }
