@@ -241,6 +241,16 @@
                 </div>
                 
                 <div class="setting-row">
+                    <label>Next Wave:</label>
+                    <button id="nextWaveBtn" style="background:#111;color:#00ffff;border:1px solid #00ffff;padding:2px 8px;cursor:pointer;">Skip ⏭</button>
+                </div>
+                
+                <div class="setting-row">
+                    <label>Next Era:</label>
+                    <button id="nextEraBtn" style="background:#111;color:#ffff00;border:1px solid #ffff00;padding:2px 8px;cursor:pointer;">Skip 🚀</button>
+                </div>
+                
+                <div class="setting-row">
                     <label>
                         <input type="checkbox" id="debugClickMode">
                         Debug Click Mode
@@ -348,6 +358,20 @@
             document.getElementById('deathWaveBtn').addEventListener('click', function() {
                 if (window.MissileCommand && window.MissileCommand.spawnDeathWave) {
                     window.MissileCommand.spawnDeathWave();
+                }
+            });
+            
+            // Next wave button
+            document.getElementById('nextWaveBtn').addEventListener('click', function() {
+                if (window.MissileCommand && window.MissileCommand.nextWave) {
+                    window.MissileCommand.nextWave();
+                }
+            });
+            
+            // Next era button
+            document.getElementById('nextEraBtn').addEventListener('click', function() {
+                if (window.MissileCommand && window.MissileCommand.nextEra) {
+                    window.MissileCommand.nextEra();
                 }
             });
             

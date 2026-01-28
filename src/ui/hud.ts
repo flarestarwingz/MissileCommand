@@ -93,8 +93,21 @@ export class HUD {
       yPos += 20;
 
       ctx.ctx.fillStyle = palette.uiText;
+      
+      // Era name
+      const eraNames: Record<string, string> = {
+        'meteors': 'Meteors',
+        'eighties_missiles': '80s Missiles',
+        'nineties_asteroids': '90s Asteroids',
+        'two_thousands': '2000s',
+        'future': 'Future'
+      };
+      const eraDisplay = eraNames[gameState.era] || gameState.era;
+      ctx.ctx.fillText(`Era: ${eraDisplay}`, padding, yPos);
+      yPos += 15;
+      
       const activeAIs = aiInstances.filter(ai => ai.towers.length > 0).length;
-      ctx.ctx.fillText(`Active AIs: ${activeAIs}`, padding, yPos);
+      ctx.ctx.fillText(`Active AIs: ${activeAIs}/${aiInstances.length}`, padding, yPos);
       yPos += 15;
 
       const avgCoordination = 

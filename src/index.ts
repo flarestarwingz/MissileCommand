@@ -471,8 +471,8 @@ export class MissileCommandWallpaper {
             cityBWillHelp = cityBThreat > 0.3 || helpBalance < -1;
           }
           
-          // Deploy if both agree
-          if (cityBWillHelp && threatLevel > 0.6) {
+          // Deploy if both agree (lowered threshold to 0.45 so cities deploy earlier)
+          if (cityBWillHelp && threatLevel > 0.45) {
             console.log(`Cities ${cityA.id} & ${nearestCity.id} agreed! Threat: ${threatLevel.toFixed(2)}/${cityBThreat.toFixed(2)}, Balance: ${helpBalance}, Stance: ${nearestCity.stance}, Direction: ${direction}`);
             
             if (cityA.deployDefender(direction)) {
@@ -668,6 +668,14 @@ export class MissileCommandWallpaper {
       }
     });
     
+    // Repair railguns (very slow - 25% of tower rate = 12.5% of city rate)
+    for (const railgun of this.railguns) {
+      if (railgun.parentCity && !railgun.parentCity.isDestroyed() && railgun.health < railgun.maxHealth) {
+        const repairAmount = railgun.parentCity.repairRate * deltaTime * 0.5 * 0.25; // 25% of tower rate
+        railgun.health = Math.min(railgun.maxHealth, railgun.health + repairAmount);
+      }
+    }
+    
     // Update AI tower lists (remove destroyed, update based on cities)
     this.aiController.updateTowerLists(this.towers);
     
@@ -835,7 +843,7 @@ export class MissileCommandWallpaper {
   }
 
   /**
-   * Update railgun AI - fire at most threatening enemy on opposite screen half
+   * Update railgun AI - fire at most threatening enemy with multi-target and hold-fire logic
    */
   private updateRailgunAI(currentTime: number): void {
     for (const railgun of this.railguns) {
@@ -847,8 +855,8 @@ export class MissileCommandWallpaper {
       const railgunX = railgun.parentCity.position.x + railgun.xOffset;
       const railgunY = railgun.parentCity.position.y;
       
-      let bestTarget: Enemy | null = null;
-      let bestThreat = -1;
+      // Evaluate all enemies in correct half
+      const validTargets: Array<{enemy: Enemy, threat: number, willHitCity: boolean, willHitRailgun: boolean}> = [];
       
       for (const enemy of this.enemies) {
         // Left railgun covers RIGHT HALF of screen (x > screenCenter)
@@ -865,9 +873,13 @@ export class MissileCommandWallpaper {
         
         if (distance > railgun.range) continue;
         
-        // Threat assessment factors:
-        // 1. Proximity to any city (closest threat)
+        // Determine threat level based on what it will hit
+        let willHitCity = false;
+        let willHitRailgun = false;
         let minCityDistance = Infinity;
+        let minRailgunDistance = Infinity;
+        
+        // Check if enemy's trajectory threatens cities
         for (const city of this.cities) {
           if (city.isDestroyed()) continue;
           const cityDist = Math.sqrt(
@@ -875,36 +887,169 @@ export class MissileCommandWallpaper {
             Math.pow(enemy.position.y - city.position.y, 2)
           );
           minCityDistance = Math.min(minCityDistance, cityDist);
+          
+          // Is it heading toward this city?
+          const headingToCity = enemy.velocity.y > 0 && Math.abs(enemy.position.x - city.position.x) < 100;
+          if (headingToCity && cityDist < 400) {
+            willHitCity = true;
+          }
         }
         
-        // 2. Health (higher health = bigger threat)
-        const healthFactor = enemy.maxHealth / 100;
+        // Check if enemy threatens other railguns
+        for (const otherRailgun of this.railguns) {
+          if (otherRailgun === railgun || otherRailgun.isDestroyed()) continue;
+          const railgunDist = Math.sqrt(
+            Math.pow(enemy.position.x - (otherRailgun.parentCity.position.x + otherRailgun.xOffset), 2) +
+            Math.pow(enemy.position.y - otherRailgun.parentCity.position.y, 2)
+          );
+          minRailgunDistance = Math.min(minRailgunDistance, railgunDist);
+          if (railgunDist < 150) {
+            willHitRailgun = true;
+          }
+        }
         
-        // 3. Y position (lower on screen = closer to ground = more urgent)
+        // Calculate threat score
+        let threatScore = 0;
+        
+        // PRIORITY 1: Direct threats to cities (HIGHEST)
+        if (willHitCity) {
+          threatScore += 1000;
+          threatScore += Math.max(0, (400 - minCityDistance) / 400 * 500); // Closer = more urgent
+        }
+        
+        // PRIORITY 2: Threats to railguns
+        if (willHitRailgun) {
+          threatScore += 500;
+        }
+        
+        // PRIORITY 3: Will cause splash damage (medium priority)
         const groundProximity = enemy.position.y / screenHeight;
+        if (groundProximity > 0.7 && !willHitCity) {
+          threatScore += 200 * groundProximity; // Near ground but not targeting city
+        }
         
-        // Calculate overall threat score (higher = more threatening)
-        // Close to cities = HIGH priority, high health = medium priority, low on screen = high priority
-        const cityProximityScore = minCityDistance < 300 ? (300 - minCityDistance) / 300 * 10 : 0;
-        const threatScore = cityProximityScore + groundProximity * 3 + healthFactor;
+        // PRIORITY 4: Harmless enemies (LOW priority - only if nothing else to shoot)
+        if (!willHitCity && !willHitRailgun && groundProximity < 0.7) {
+          threatScore += 10; // Very low
+        }
         
-        if (threatScore > bestThreat) {
-          bestThreat = threatScore;
-          bestTarget = enemy;
+        // Bonus for high health (boss-like)
+        if (enemy.maxHealth > 100) {
+          threatScore += 50;
+        }
+        
+        validTargets.push({enemy, threat: threatScore, willHitCity, willHitRailgun});
+      }
+      
+      // Sort by threat (highest first)
+      validTargets.sort((a, b) => b.threat - a.threat);
+      
+      // Always update visual target to highest threat (even if we won't fire)
+      railgun.currentTarget = validTargets.length > 0 ? validTargets[0].enemy : null;
+      
+      // Smoothly rotate railgun toward target (visual only)
+      if (railgun.currentTarget) {
+        const targetAngle = Math.atan2(
+          railgun.currentTarget.position.y - railgunY,
+          railgun.currentTarget.position.x - railgunX
+        );
+        // Smooth interpolation toward target angle
+        const angleDiff = targetAngle - railgun.currentAngle;
+        const normalizedDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
+        railgun.currentAngle += normalizedDiff * 0.15; // 15% interpolation for smooth movement
+      }
+      
+      // Don't fire if we can't fire yet
+      if (!railgun.canFire(currentTime)) continue;
+      
+      // HOLD FIRE logic: Don't waste shots on harmless enemies
+      if (validTargets.length > 0 && validTargets[0].threat < 100) {
+        // Nothing is really dangerous - hold fire
+        continue;
+      }
+      
+      // Find best shot considering multi-target potential
+      let bestShot: {target: Enemy, multiKillCount: number, totalThreat: number} | null = null;
+      
+      for (const candidate of validTargets.slice(0, 5)) { // Check top 5 threats
+        const targetX = candidate.enemy.position.x;
+        const targetY = candidate.enemy.position.y;
+        
+        // Calculate beam path (extended to screen edge)
+        const angle = Math.atan2(targetY - railgunY, targetX - railgunX);
+        const maxDistance = Math.max(screenWidth, screenHeight) * 2;
+        const endX = railgunX + Math.cos(angle) * maxDistance;
+        const endY = railgunY + Math.sin(angle) * maxDistance;
+        
+        // Count how many enemies this beam would hit
+        let multiKillCount = 0;
+        let totalThreat = 0;
+        
+        for (const potential of validTargets) {
+          // Check if potential target intersects with beam path
+          const distToLine = this.distanceToLineSegment(
+            potential.enemy.position,
+            {x: railgunX, y: railgunY},
+            {x: endX, y: endY}
+          );
+          
+          if (distToLine < potential.enemy.radius + 5) {
+            multiKillCount++;
+            totalThreat += potential.threat;
+          }
+        }
+        
+        // Prefer shots that hit multiple targets or high-threat singles
+        const shotValue = totalThreat * (1 + multiKillCount * 0.5);
+        
+        if (!bestShot || shotValue > bestShot.totalThreat) {
+          bestShot = {target: candidate.enemy, multiKillCount, totalThreat: shotValue};
         }
       }
       
-      // Always update current target (for visualization), but only fire when ready
-      railgun.currentTarget = bestTarget;
-      
-      // Fire at the most threatening enemy
-      if (bestTarget && railgun.canFire(currentTime)) {
-        const bolt = railgun.fire(bestTarget.position.x, bestTarget.position.y, screenWidth, screenHeight, currentTime);
+      // Fire at best shot
+      if (bestShot) {
+        const bolt = railgun.fire(
+          bestShot.target.position.x,
+          bestShot.target.position.y,
+          screenWidth,
+          screenHeight,
+          currentTime
+        );
         if (bolt) {
           this.railgunBolts.push(bolt);
+          if (bestShot.multiKillCount > 1) {
+            console.log(`⚡ Railgun multi-shot: ${bestShot.multiKillCount} targets`);
+          }
         }
       }
     }
+  }
+  
+  /**
+   * Calculate distance from point to line segment
+   */
+  private distanceToLineSegment(point: {x: number, y: number}, lineStart: {x: number, y: number}, lineEnd: {x: number, y: number}): number {
+    const dx = lineEnd.x - lineStart.x;
+    const dy = lineEnd.y - lineStart.y;
+    const lengthSq = dx * dx + dy * dy;
+    
+    if (lengthSq === 0) {
+      return Math.sqrt(
+        Math.pow(point.x - lineStart.x, 2) + Math.pow(point.y - lineStart.y, 2)
+      );
+    }
+    
+    const t = Math.max(0, Math.min(1,
+      ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / lengthSq
+    ));
+    
+    const projX = lineStart.x + t * dx;
+    const projY = lineStart.y + t * dy;
+    
+    return Math.sqrt(
+      Math.pow(point.x - projX, 2) + Math.pow(point.y - projY, 2)
+    );
   }
 
   /**
@@ -1024,8 +1169,14 @@ export class MissileCommandWallpaper {
         for (const city of this.cities) {
           const dist = Math.abs(city.position.x - enemy.position.x);
           if (dist < 100) {
+            const wasAlive = !city.isDestroyed();
             const damage = Math.ceil(enemy.maxHealth * 0.5 * (1 - dist / 100));
             city.takeDamage(damage);
+            
+            // Increment destroyed counter if city just died
+            if (wasAlive && city.isDestroyed()) {
+              this.gameEngine.getGameState().citiesDestroyed++;
+            }
             
             // Damage towers on the side of impact
             for (const tower of this.towers) {
@@ -1152,9 +1303,15 @@ export class MissileCommandWallpaper {
           { x: enemy.position.x, y: enemy.position.y, radius: enemy.radius },
           { x: city.position.x, y: city.position.y, radius: city.radius }
         ).isColliding) {
+          const wasAlive = !city.isDestroyed();
           const damage = Math.ceil(enemy.maxHealth * 0.3);
           city.takeDamage(damage);
           enemy.active = false;
+          
+          // Increment destroyed counter if city just died
+          if (wasAlive && city.isDestroyed()) {
+            this.gameEngine.getGameState().citiesDestroyed++;
+          }
           
           // Damage towers based on which side was hit
           for (const tower of this.towers) {
@@ -1240,18 +1397,18 @@ export class MissileCommandWallpaper {
     const gimmicks = this.waveSpawner.getEraGimmicks(eraName);
     
     if (gimmicks && gimmicks.length > 0) {
-      // Find boss-like enemies (high health, special abilities)
+      // Find boss-like enemies (75+ health, special abilities)
       const bosses = gimmicks.filter(
-        (g: any) => g.health > 100 || g.specialAbility || g.behavior === 'bombing' || g.behavior === 'stationary'
+        (g: any) => g.health >= 75 || g.specialAbility || g.behavior === 'bombing' || g.behavior === 'stationary'
       );
       
       if (bosses.length > 0) {
         const x = random(100, width - 100);
         const y = -50;
         const bossConfig = bosses[Math.floor(Math.random() * bosses.length)];
-        const boss = new Enemy(x, y, bossConfig);
+        const boss = new Enemy(x, y, bossConfig, gameState.wave);
         this.enemies.push(boss);
-        console.log(`Spawned boss: ${bossConfig.name} for era ${era}`);
+        console.log(`✨ Manual boss spawned: ${bossConfig.name} for era ${era}`);
         return;
       }
     }
@@ -1267,11 +1424,39 @@ export class MissileCommandWallpaper {
       size: 50,
       rarity: 1.0,
       aiAwareness: 'critical',
-      behavior: 'slow_advance',
+      behavior: 'falling',
     };
-    const boss = new Enemy(x, y, bossConfig);
+    const boss = new Enemy(x, y, bossConfig, gameState.wave);
     this.enemies.push(boss);
-    console.log('Debug boss spawned!');
+    console.log('✨ Manual debug boss spawned!');
+  }
+
+  /**
+   * Skip to next wave (debug)
+   */
+  public nextWave(): void {
+    const gameState = this.gameEngine.getGameState();
+    // Clear all current enemies
+    this.enemies = [];
+    this.projectiles = [];
+    // Progress wave
+    gameState.nextWave();
+    this.waveSpawner.reset();
+    console.log(`⏭️ Skipped to wave ${gameState.wave}, era ${gameState.era}`);
+  }
+
+  /**
+   * Skip to next era (debug)
+   */
+  public nextEra(): void {
+    const gameState = this.gameEngine.getGameState();
+    // Clear all current enemies
+    this.enemies = [];
+    this.projectiles = [];
+    // Progress era
+    gameState.nextEra();
+    this.waveSpawner.reset();
+    console.log(`🚀 Skipped to era ${gameState.era}, wave ${gameState.wave}`);
   }
   
   /**
@@ -1857,6 +2042,53 @@ export class MissileCommandWallpaper {
           );
         }
       }
+      
+      // Turret aim visualization (show where AI is predicting targets)
+      const aiInstances = this.aiController.getAIInstances();
+      for (const ai of aiInstances) {
+        if (ai.debugAimPositions) {
+          for (const tower of ai.towers) {
+            if (tower.isDestroyed() || !tower.active) continue;
+            
+            const aimPos = ai.debugAimPositions.get(tower.id);
+            if (aimPos) {
+              // Draw line from tower to predicted aim position
+              renderCtx.ctx.strokeStyle = tower.isFlakTower ? '#FF8800' : '#00FF0088';
+              renderCtx.ctx.lineWidth = 1;
+              renderCtx.ctx.setLineDash([4, 4]);
+              renderCtx.ctx.beginPath();
+              renderCtx.ctx.moveTo(tower.position.x, tower.position.y);
+              renderCtx.ctx.lineTo(aimPos.x, aimPos.y);
+              renderCtx.ctx.stroke();
+              renderCtx.ctx.setLineDash([]);
+              
+              // Draw crosshair at aim position
+              renderCtx.ctx.strokeStyle = tower.isFlakTower ? '#FF8800' : '#00FF00';
+              renderCtx.ctx.lineWidth = 2;
+              const crossSize = 5;
+              renderCtx.ctx.beginPath();
+              renderCtx.ctx.moveTo(aimPos.x - crossSize, aimPos.y);
+              renderCtx.ctx.lineTo(aimPos.x + crossSize, aimPos.y);
+              renderCtx.ctx.moveTo(aimPos.x, aimPos.y - crossSize);
+              renderCtx.ctx.lineTo(aimPos.x, aimPos.y + crossSize);
+              renderCtx.ctx.stroke();
+              
+              // Show accuracy percentage next to crosshair
+              renderCtx.ctx.fillStyle = tower.isFlakTower ? '#FF8800' : '#00FF00';
+              renderCtx.ctx.font = '9px monospace';
+              renderCtx.ctx.textAlign = 'left';
+              renderCtx.ctx.fillText(
+                `${Math.round(ai.difficulty * 100)}%`,
+                aimPos.x + 8,
+                aimPos.y - 5
+              );
+            }
+          }
+        }
+      }
+      
+      // Reset text align
+      renderCtx.ctx.textAlign = 'center';
     }
     
     // Render truck availability for each city (above city)
@@ -2064,7 +2296,30 @@ class WaveSpawner {
       const gimmicks = this.gimmicksConfig.eras[eraName];
       
       if (gimmicks && gimmicks.length > 0) {
-        // Weight by rarity
+        // Check if we should spawn a boss (15% chance, more frequent later in wave)
+        const waveProgress = this.enemiesSpawnedThisWave / this.maxEnemiesPerWave;
+        const bossChance = waveProgress > 0.5 ? 0.15 : 0.05; // Higher chance in second half of wave
+        const shouldSpawnBoss = Math.random() < bossChance;
+        
+        if (shouldSpawnBoss) {
+          // Try to spawn a boss (lower threshold to 75+ HP to include more enemies)
+          const bosses = gimmicks.filter(
+            (g: any) => g.health >= 75 || g.specialAbility || g.behavior === 'bombing'
+          );
+          
+          if (bosses.length > 0) {
+            const bossConfig = bosses[Math.floor(Math.random() * bosses.length)];
+            const y = bossConfig.behavior === 'stationary' ? 0 : -30;
+            const boss = new Enemy(x, y, bossConfig);
+            boss.speed *= this.getSpeedMultiplier();
+            enemies.push(boss);
+            this.enemiesSpawnedThisWave++;
+            console.log(`🎯 Boss spawned: ${bossConfig.name}`);
+            return enemies;
+          }
+        }
+        
+        // Normal enemy spawning - weight by rarity
         const totalRarity = gimmicks.reduce((sum: number, g: any) => sum + g.rarity, 0);
         let roll = Math.random() * totalRarity;
         
@@ -2098,6 +2353,20 @@ class WaveSpawner {
     return enemies;
   }
 
+  /**
+   * Get current max enemies for this point in the wave (scales up during wave)
+   */
+  getCurrentMaxEnemies(): number {
+    // At start of wave: base amount
+    // Partway through: allow more enemies on screen
+    const waveProgress = this.enemiesSpawnedThisWave / this.maxEnemiesPerWave;
+    
+    // Scale from 1.0x at start to 1.5x at 75% through wave
+    const scaleFactor = 1.0 + Math.min(waveProgress * 0.67, 0.5); // 1.0x to 1.5x
+    
+    return Math.floor(this.maxEnemiesPerWave * scaleFactor);
+  }
+  
   /**
    * Get gimmicks for an era
    */
@@ -2133,6 +2402,8 @@ declare global {
       spawnBoss: () => void;
       spawnDeathWave: () => void;
       setDebugClickMode: (enabled: boolean) => void;
+      nextWave: () => void;
+      nextEra: () => void;
     };
   }
 }
@@ -2150,6 +2421,8 @@ if (document.readyState === 'loading') {
       spawnBoss: () => gameInstance.spawnBoss(),
       spawnDeathWave: () => gameInstance.spawnDeathWave(),
       setDebugClickMode: (enabled: boolean) => gameInstance.setDebugClickMode(enabled),
+      nextWave: () => gameInstance.nextWave(),
+      nextEra: () => gameInstance.nextEra(),
     };
   });
 } else {
@@ -2161,5 +2434,7 @@ if (document.readyState === 'loading') {
     spawnBoss: () => gameInstance.spawnBoss(),
     spawnDeathWave: () => gameInstance.spawnDeathWave(),
     setDebugClickMode: (enabled: boolean) => gameInstance.setDebugClickMode(enabled),
+    nextWave: () => gameInstance.nextWave(),
+    nextEra: () => gameInstance.nextEra(),
   };
 }

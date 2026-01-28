@@ -78,6 +78,33 @@ export class GameState {
   }
 
   /**
+   * Skip to next era (debug feature)
+   */
+  nextEra(): void {
+    const eraOrder = [
+      GameEra.METEORS,
+      GameEra.EIGHTIES_MISSILES,
+      GameEra.NINETIES_ASTEROIDS,
+      GameEra.TWO_THOUSANDS,
+      GameEra.FUTURE,
+    ];
+    
+    const currentIndex = eraOrder.indexOf(this.era);
+    if (currentIndex < eraOrder.length - 1) {
+      this.era = eraOrder[currentIndex + 1];
+      // Set level to match the era start
+      if (this.era === GameEra.EIGHTIES_MISSILES) this.level = 5;
+      else if (this.era === GameEra.NINETIES_ASTEROIDS) this.level = 10;
+      else if (this.era === GameEra.TWO_THOUSANDS) this.level = 15;
+      else if (this.era === GameEra.FUTURE) this.level = 20;
+      
+      // Also update wave to match level
+      this.wave = this.level * 5;
+      this.nextWave();
+    }
+  }
+
+  /**
    * Get game over stats
    */
   getGameOverStats(): GameStats {

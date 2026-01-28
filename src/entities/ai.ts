@@ -17,6 +17,7 @@ export interface AIInstance {
   reactionTime: number; // Milliseconds to react
   lastReactionTime: number;
   coordinationLevel: number; // 0-1, how much AI coordinates with others
+  debugAimPositions?: Map<string, Vector2>; // Tower ID -> predicted aim position (debug only)
 }
 
 export class AIController {
@@ -48,8 +49,7 @@ export class AIController {
         targetEnemy: null,
         reactionTime: 200 - difficulty * 150, // 50-200ms
         lastReactionTime: 0,
-        coordinationLevel: 0,
-      };
+        coordinationLevel: 0,        debugAimPositions: new Map(),      };
       
       this.aiInstances.push(instance);
     }
@@ -77,6 +77,7 @@ export class AIController {
         reactionTime: 200 - difficulty * 150, // 50-200ms
         lastReactionTime: 0,
         coordinationLevel: city.stance === 'cooperative' ? 0.8 : city.stance === 'selfish' ? 0.2 : 0.5,
+        debugAimPositions: new Map(),
       };
       
       this.aiInstances.push(instance);
@@ -117,6 +118,11 @@ export class AIController {
 
     // Each AI makes decisions
     for (const ai of this.aiInstances) {
+      // Clear previous frame's debug positions
+      if (ai.debugAimPositions) {
+        ai.debugAimPositions.clear();
+      }
+      
       // Check if it's time for this AI to react
       if (currentTime - ai.lastReactionTime > ai.reactionTime) {
         ai.lastReactionTime = currentTime;
@@ -130,29 +136,41 @@ export class AIController {
           
           if (!bestTarget) continue;
           
-          // Calculate hit probability based on difficulty
+          // Calculate proper interception point
           const distanceToEnemy = distance(tower.position, bestTarget.position);
-          const interceptChance = 0.5 + ai.difficulty * 0.5; // 50-100% chance to hit
-
-          if (Math.random() < interceptChance) {
-            // Fire at predicted position
-            const predictedPos = this.predictEnemyPosition(bestTarget, distanceToEnemy, tower.position);
-            
-            // Check if can fire at target (angle and obstacles)
-            const groundY = this.height - 40;
-            if (tower.canFireAt(predictedPos, this.cities, groundY) && tower.fire(currentTime, predictedPos)) {
-              // Flak towers fire explosive projectiles
-              const explosionRadius = tower.isFlakTower ? 35 : 0;
-              const projectile = new Projectile(
-                tower.position,
-                predictedPos,
-                250,
-                tower.damage,
-                '#00FF00',
-                explosionRadius
-              );
-              newProjectiles.push(projectile);
-            }
+          const predictedPos = this.predictEnemyPosition(bestTarget, distanceToEnemy, tower.position, ai.difficulty);
+          
+          // Store debug aim position
+          if (ai.debugAimPositions) {
+            ai.debugAimPositions.set(tower.id, predictedPos);
+          }
+          
+          // Check if can fire at target (angle and obstacles)
+          const groundY = this.height - 40;
+          if (tower.canFireAt(predictedPos, this.cities, groundY) && tower.fire(currentTime, predictedPos)) {
+            // Flak towers fire explosive projectiles
+            const explosionRadius = tower.isFlakTower ? 35 : 0;
+            const projectile = new Projectile(
+              tower.position,
+              predictedPos,
+              250,
+              tower.damage,
+              '#00FF00',
+              explosionRadius
+            );
+            newProjectiles.push(projectile);
+          }
+        }
+      } else {
+        // Not reacting yet, but still show where towers would aim at current targets
+        for (const tower of ai.towers) {
+          if (!tower.active || tower.isDestroyed()) continue;
+          
+          const bestTarget = this.findBestTarget(ai, tower);
+          if (bestTarget && ai.debugAimPositions) {
+            const distanceToEnemy = distance(tower.position, bestTarget.position);
+            const predictedPos = this.predictEnemyPosition(bestTarget, distanceToEnemy, tower.position, ai.difficulty);
+            ai.debugAimPositions.set(tower.id, predictedPos);
           }
         }
       }
@@ -254,19 +272,98 @@ export class AIController {
   }
 
   /**
-   * Predict where enemy will be
+   * Predict where enemy will be - proper interception calculation
    */
-  private predictEnemyPosition(enemy: Enemy, distance: number, from: Vector2): Vector2 {
-    // Rough prediction based on enemy speed and direction
-    const timeToHit = distance / 250; // Projectile speed
-    const predictedX = enemy.position.x + enemy.velocity.x * timeToHit;
-    const predictedY = enemy.position.y + enemy.velocity.y * timeToHit;
-
-    // Add some inaccuracy based on AI difficulty
-    const inaccuracy = (1 - this.aiInstances[0]?.difficulty || 0.5) * 20;
+  private predictEnemyPosition(enemy: Enemy, distance: number, from: Vector2, accuracy: number): Vector2 {
+    const projectileSpeed = 250;
+    
+    // For 100% accuracy, use perfect interception math
+    if (accuracy >= 0.99) {
+      // Solve for interception point where projectile meets enemy
+      // Using quadratic formula to find time when distances are equal
+      const dx = enemy.position.x - from.x;
+      const dy = enemy.position.y - from.y;
+      const vx = enemy.velocity.x;
+      const vy = enemy.velocity.y;
+      
+      // Quadratic coefficients: a*t^2 + b*t + c = 0
+      const a = vx * vx + vy * vy - projectileSpeed * projectileSpeed;
+      const b = 2 * (dx * vx + dy * vy);
+      const c = dx * dx + dy * dy;
+      
+      // Solve quadratic
+      const discriminant = b * b - 4 * a * c;
+      
+      if (discriminant >= 0 && Math.abs(a) > 0.001) {
+        // Two solutions - pick the smallest positive one
+        const t1 = (-b + Math.sqrt(discriminant)) / (2 * a);
+        const t2 = (-b - Math.sqrt(discriminant)) / (2 * a);
+        
+        let timeToIntercept = -1;
+        if (t1 > 0 && t2 > 0) {
+          timeToIntercept = Math.min(t1, t2);
+        } else if (t1 > 0) {
+          timeToIntercept = t1;
+        } else if (t2 > 0) {
+          timeToIntercept = t2;
+        }
+        
+        if (timeToIntercept > 0) {
+          // Perfect interception point
+          return {
+            x: enemy.position.x + vx * timeToIntercept,
+            y: enemy.position.y + vy * timeToIntercept
+          };
+        }
+      }
+      
+      // Fallback to simple leading if quadratic fails
+      const timeToHit = distance / projectileSpeed;
+      return {
+        x: enemy.position.x + vx * timeToHit,
+        y: enemy.position.y + vy * timeToHit
+      };
+    }
+    
+    // For lower accuracy, use simpler prediction with increasing error
+    const timeToHit = distance / projectileSpeed;
+    
+    // Base prediction
+    let predictedX = enemy.position.x + enemy.velocity.x * timeToHit;
+    let predictedY = enemy.position.y + enemy.velocity.y * timeToHit;
+    
+    // High accuracy (0.8-0.99) gets good prediction with small error
+    if (accuracy >= 0.8) {
+      // 80-99% accuracy: Very good leading with tiny random error
+      const errorScale = (1 - accuracy) * 30; // 0.3-6 pixels of error
+      predictedX += (Math.random() - 0.5) * errorScale;
+      predictedY += (Math.random() - 0.5) * errorScale;
+      return { x: predictedX, y: predictedY };
+    }
+    
+    // Medium accuracy (0.6-0.8): Decent leading but applies less of the calculated lead
+    if (accuracy >= 0.6) {
+      const leadEffectiveness = 0.7 + (accuracy - 0.6) * 1.5; // 0.7 to 1.0
+      const actualPredictedX = enemy.position.x + (predictedX - enemy.position.x) * leadEffectiveness;
+      const actualPredictedY = enemy.position.y + (predictedY - enemy.position.y) * leadEffectiveness;
+      
+      const errorScale = (1 - accuracy) * 40;
+      return {
+        x: actualPredictedX + (Math.random() - 0.5) * errorScale,
+        y: actualPredictedY + (Math.random() - 0.5) * errorScale
+      };
+    }
+    
+    // Low accuracy (< 0.6): Poor leading
+    const leadEffectiveness = 0.4 + accuracy * 0.5; // 0.4 to 0.7
+    const actualPredictedX = enemy.position.x + (predictedX - enemy.position.x) * leadEffectiveness;
+    const actualPredictedY = enemy.position.y + (predictedY - enemy.position.y) * leadEffectiveness;
+    
+    // Large inaccuracy for low skill AI
+    const errorScale = (1 - accuracy) * 50;
     return {
-      x: predictedX + (Math.random() - 0.5) * inaccuracy,
-      y: predictedY + (Math.random() - 0.5) * inaccuracy,
+      x: actualPredictedX + (Math.random() - 0.5) * errorScale,
+      y: actualPredictedY + (Math.random() - 0.5) * errorScale,
     };
   }
 
